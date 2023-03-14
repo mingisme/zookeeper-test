@@ -26,7 +26,7 @@ import org.apache.curator.framework.state.ConnectionStateListener;
 
 import java.util.concurrent.TimeUnit;
 
-public class ExampleClientThatLocks implements ConnectionStateListener
+public class ExampleClientThatLocks implements ConnectionStateListener //Not sure about this listener
 {
     private final InterProcessMutex lock;
     private final FakeLimitedResource resource;
