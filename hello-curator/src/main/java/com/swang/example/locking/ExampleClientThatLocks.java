@@ -19,11 +19,14 @@
 package com.swang.example.locking;
 
 import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.recipes.leader.CancelLeadershipException;
 import org.apache.curator.framework.recipes.locks.InterProcessMutex;
+import org.apache.curator.framework.state.ConnectionState;
+import org.apache.curator.framework.state.ConnectionStateListener;
 
 import java.util.concurrent.TimeUnit;
 
-public class ExampleClientThatLocks
+public class ExampleClientThatLocks implements ConnectionStateListener
 {
     private final InterProcessMutex lock;
     private final FakeLimitedResource resource;
@@ -51,6 +54,14 @@ public class ExampleClientThatLocks
         {
             System.out.println(clientName + " releasing the lock");
             lock.release(); // always release the lock in a finally block
+        }
+    }
+
+    @Override
+    public void stateChanged(CuratorFramework client, ConnectionState newState) {
+        if ( client.getConnectionStateErrorPolicy().isErrorState(newState) )
+        {
+            throw new CancelLeadershipException();
         }
     }
 }

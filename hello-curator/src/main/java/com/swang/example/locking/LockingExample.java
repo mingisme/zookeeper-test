@@ -55,7 +55,7 @@ public class LockingExample {
 
                             ExampleClientThatLocks example = new ExampleClientThatLocks(client, PATH, resource, "Client " + index);
                             for (int j = 0; j < REPETITIONS; ++j) {
-                                example.doWork(10, TimeUnit.SECONDS);
+                                example.doWork(1, TimeUnit.SECONDS);
                             }
                         } catch (InterruptedException e) {
                             Thread.currentThread().interrupt();

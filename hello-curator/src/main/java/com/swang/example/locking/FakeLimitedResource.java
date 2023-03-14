@@ -38,7 +38,7 @@ public class FakeLimitedResource
 
         try
         {
-            Thread.sleep((long)(3 * Math.random()));
+            Thread.sleep((long)(10 * Math.random()));
         }
         finally
         {
