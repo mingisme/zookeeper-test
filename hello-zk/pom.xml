@@ -32,6 +32,30 @@
                     <target>8</target>
                 </configuration>
             </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.0.0</version>
+                <configuration>
+                    <mainClass>org.swang.barrier_queue.SyncPrimitive</mainClass>
+                    <arguments>
+                        <argument>qTest</argument>
+                        <argument>localhost</argument>
+                        <argument>20</argument>
+                        <argument>c</argument>
+                        <!-- Add more arguments as needed -->
+                    </arguments>
+                </configuration>
+<!--                <executions>-->
+<!--                    <execution>-->
+<!--                        <id>run-my-class</id>-->
+<!--                        <phase>test</phase> &lt;!&ndash; Or any phase you prefer &ndash;&gt;-->
+<!--                        <goals>-->
+<!--                            <goal>java</goal>-->
+<!--                        </goals>-->
+<!--                    </execution>-->
+<!--                </executions>-->
+            </plugin>
         </plugins>
     </build>
 
