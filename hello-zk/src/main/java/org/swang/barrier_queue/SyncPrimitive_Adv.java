@@ -1,5 +1,9 @@
 package org.swang.barrier_queue;
 
+import org.apache.zookeeper.*;
+import org.apache.zookeeper.ZooDefs.Ids;
+import org.apache.zookeeper.data.Stat;
+
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -7,25 +11,17 @@ import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Random;
 
-import org.apache.zookeeper.CreateMode;
-import org.apache.zookeeper.KeeperException;
-import org.apache.zookeeper.WatchedEvent;
-import org.apache.zookeeper.Watcher;
-import org.apache.zookeeper.ZooKeeper;
-import org.apache.zookeeper.ZooDefs.Ids;
-import org.apache.zookeeper.data.Stat;
-
 
 //https://zookeeper.apache.org/doc/current/zookeeperTutorial.html
 //edit pom.xml then run mvn exec:java
-public class SyncPrimitive implements Watcher {
+public class SyncPrimitive_Adv implements Watcher {
 
     static ZooKeeper zk = null;
     static Integer mutex;
     String root;
 
-    SyncPrimitive(String address) {
-        if(zk == null){
+    SyncPrimitive_Adv(String address) {
+        if (zk == null) {
             try {
                 System.out.println("Starting ZK:");
                 zk = new ZooKeeper(address, 3000, this);
@@ -49,7 +45,7 @@ public class SyncPrimitive implements Watcher {
     /**
      * Barrier
      */
-    static public class Barrier extends SyncPrimitive {
+    static public class Barrier extends SyncPrimitive_Adv {
         int size;
         String name;
 
@@ -93,22 +89,32 @@ public class SyncPrimitive implements Watcher {
 
         /**
          * Join barrier
+         * 1.exist("root_ready",true)
+         * 2.create("root/p",ephemeral)
+         * 3.getChildren(root,false).size() < size wait
+         * 4.else create("root_ready",ephemeral)
          *
          * @return
          * @throws KeeperException
          * @throws InterruptedException
          */
 
-        boolean enter() throws KeeperException, InterruptedException{
+        boolean enter() throws KeeperException, InterruptedException {
+            zk.exists(root + "_ready", true);
             zk.create(root + "/" + name, new byte[0], Ids.OPEN_ACL_UNSAFE,
                     CreateMode.EPHEMERAL);
             while (true) {
                 synchronized (mutex) {
-                    List<String> list = zk.getChildren(root, true); //herd effect, if new node, it is triggered
-
+                    List<String> list = zk.getChildren(root, false);
                     if (list.size() < size) {
                         mutex.wait();
+                        System.out.println("enter notified: " + name);
                     } else {
+                        try {
+                            zk.create(root + "_ready", new byte[0], Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL);
+                        } catch (Exception e) {
+                            //do nothing
+                        }
                         return true;
                     }
                 }
@@ -117,20 +123,46 @@ public class SyncPrimitive implements Watcher {
 
         /**
          * Wait until all reach barrier
+         * 1.L = getChildren(root,false)
+         * 2.if empty, return
+         * 3.if only one in L is current p, delete, return
+         * 4.if current p is lowest, watch highest exist
+         * 5.else delete p and watch the lowest
          *
          * @return
          * @throws KeeperException
          * @throws InterruptedException
          */
-        boolean leave() throws KeeperException, InterruptedException{
-            zk.delete(root + "/" + name, 0);
+        boolean leave() throws KeeperException, InterruptedException {
+
             while (true) {
                 synchronized (mutex) {
-                    List<String> list = zk.getChildren(root, true); //herd effect, if delete node, it is triggered
-                    if (list.size() > 0) {
-                        mutex.wait();
-                    } else {
+                    List<String> list = zk.getChildren(root, false);
+                    System.out.println(list);
+                    if (list.isEmpty()) {
                         return true;
+                    }
+                    if (list.size() == 1) {
+                        if (list.get(0).equals(name)) {
+                            zk.delete(root + "/" + name, 0);
+                            System.out.println("delete " + name);
+                            return true;
+                        } else {
+                            throw new RuntimeException("should not happen");
+                        }
+                    }
+                    if (list.get(0).equals(name)) {
+                        zk.exists(root + "/" + list.get(list.size() - 1), true);
+                        System.out.println(name + " watch " + list.get(list.size() - 1));
+                        mutex.wait();
+                        System.out.println("leave notified: " + name);
+                    }else{
+                        zk.delete(root + "/" + name, 0);
+                        System.out.println("delete " + name);
+                        zk.exists(root + "/" + list.get(0), true);
+                        System.out.println(name + " watch " + list.get(0));
+                        mutex.wait();
+                        System.out.println("leave notified: " + name);
                     }
                 }
             }
@@ -140,7 +172,7 @@ public class SyncPrimitive implements Watcher {
     /**
      * Producer-Consumer queue
      */
-    static public class Queue extends SyncPrimitive {
+    static public class Queue extends SyncPrimitive_Adv {
 
         /**
          * Constructor of producer-consumer queue
@@ -176,7 +208,7 @@ public class SyncPrimitive implements Watcher {
          * @return
          */
 
-        boolean produce(int i) throws KeeperException, InterruptedException{
+        boolean produce(int i) throws KeeperException, InterruptedException {
             ByteBuffer b = ByteBuffer.allocate(4);
             byte[] value;
 
@@ -196,7 +228,7 @@ public class SyncPrimitive implements Watcher {
          * @throws KeeperException
          * @throws InterruptedException
          */
-        int consume() throws KeeperException, InterruptedException{
+        int consume() throws KeeperException, InterruptedException {
             int retvalue = -1;
             Stat stat = null;
 
@@ -210,10 +242,10 @@ public class SyncPrimitive implements Watcher {
                     } else {
                         Integer min = new Integer(list.get(0).substring(7));
                         String minNode = list.get(0);
-                        for(String s : list){
+                        for (String s : list) {
                             Integer tempValue = new Integer(s.substring(7));
                             //System.out.println("Temporary value: " + tempValue);
-                            if(tempValue < min) {
+                            if (tempValue < min) {
                                 min = tempValue;
                                 minNode = s;
                             }
@@ -250,23 +282,23 @@ public class SyncPrimitive implements Watcher {
         if (args[3].equals("p")) {
             System.out.println("Producer");
             for (i = 0; i < max; i++)
-                try{
+                try {
                     q.produce(10 + i);
-                } catch (KeeperException e){
+                } catch (KeeperException e) {
 
-                } catch (InterruptedException e){
+                } catch (InterruptedException e) {
 
                 }
         } else {
             System.out.println("Consumer");
 
             for (i = 0; i < max; i++) {
-                try{
+                try {
                     int r = q.consume();
                     System.out.println("Item: " + r);
-                } catch (KeeperException e){
+                } catch (KeeperException e) {
                     i--;
-                } catch (InterruptedException e){
+                } catch (InterruptedException e) {
                 }
             }
         }
@@ -274,12 +306,12 @@ public class SyncPrimitive implements Watcher {
 
     public static void barrierTest(String args[]) {
         Barrier b = new Barrier(args[1], "/b1", new Integer(args[2]));
-        try{
+        try {
             boolean flag = b.enter();
             System.out.println("Entered barrier: " + args[2]);
-            if(!flag) System.out.println("Error when entering the barrier");
-        } catch (KeeperException e){
-        } catch (InterruptedException e){
+            if (!flag) System.out.println("Error when entering the barrier");
+        } catch (KeeperException e) {
+        } catch (InterruptedException e) {
         }
 
         // Generate random integer
@@ -292,11 +324,11 @@ public class SyncPrimitive implements Watcher {
             } catch (InterruptedException e) {
             }
         }
-        try{
+        try {
             b.leave();
-        } catch (KeeperException e){
+        } catch (KeeperException e) {
 
-        } catch (InterruptedException e){
+        } catch (InterruptedException e) {
 
         }
         System.out.println("Left barrier");

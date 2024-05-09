@@ -37,12 +37,12 @@
                 <artifactId>exec-maven-plugin</artifactId>
                 <version>3.0.0</version>
                 <configuration>
-                    <mainClass>org.swang.barrier_queue.SyncPrimitive</mainClass>
+                    <mainClass>org.swang.barrier_queue.SyncPrimitive_Adv</mainClass>
                     <arguments>
-                        <argument>qTest</argument>
+                        <argument>bTest</argument>
                         <argument>localhost</argument>
-                        <argument>20</argument>
-                        <argument>c</argument>
+                        <argument>3</argument>
+<!--                        <argument>c</argument>-->
                         <!-- Add more arguments as needed -->
                     </arguments>
                 </configuration>
